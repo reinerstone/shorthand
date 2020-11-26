@@ -3,6 +3,11 @@ IMPORTS
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 import streamlit as st
 
+# This is for integrated debugging: https://awesome-streamlit.readthedocs.io/en/latest/vscode.html
+import ptvsd
+ptvsd.enable_attach(address=('localhost', 5678))
+ptvsd.wait_for_attach() # Only include this line if you always wan't to attach the debugger
+
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 GLOBAL VARIABLES
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -50,6 +55,8 @@ def fileUploader():
             fileByteArray.append(fileData[k].read())
             k+=1
 
+        if (fileByteArray == []):
+                st.warning('You need to select file(s).')
 
 
 

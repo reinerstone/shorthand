@@ -23,4 +23,4 @@ ptvsd.wait_for_attach() # Only include this line if you always wan't to attach t
 
 guiLib.sidebarGui()
 
-#guiLib.mainGui(testData, fileName)
+guiLib.mainGui()

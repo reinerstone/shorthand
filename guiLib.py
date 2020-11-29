@@ -59,15 +59,68 @@ def sidebarGui():
     st.sidebar.text('(Download The File To Listen To It)')
     
     # Remove and download files from the controller
-    manageFile(selFile)
+    manageFiles(selFile)
+
+    # Run a test
+    testData = manageTest(selFile)
     
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 SIDEBAR LIB
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-# manageFile(fileName)
+# manageTest(selFile)
+#   - Displays the 'start playing' and the 'start testing' buttons and activates the respective actions
+def manageTest(selFile):
+    testData = None
+    with st.sidebar.beta_expander("Test File"):
+        col1, col2 = st.beta_columns([2, 2])
+        # If the button was clicked
+        if col1.button('Start Playing'):
+            
+            # Tell the sending unit to start playing the audio
+            startPlay(selFile)
+
+            #msg, ipaddr = udpServer(addr)
+
+            # Tell the recieving unit to start waiting for a signal
+            recFile = recieveFile(selFile)
+
+            #for unit in selFile:
+            st.sidebar.success('Playing the Audio File')
+
+        ## If the button was clicked, stop the playing
+        #if col2.button('Stop Playing'):
+        #    msg = b'11as'
+        #    addr = [unitAddrs['11'], int(unitPorts['11'])]
+
+        #    # Send protocol
+        #    udpSend(addr, msg)
+
+        # If the button was clicked, stop the playing
+        if col2.button('Start Testing'):
+            testData = startTest(selFile)
+
+        ## If the button was clicked, stop the playing
+        #if col2.button('Stop Testing'):
+        #    msg = b'11as'
+        #    addr = [unitAddrs['11'], int(unitPorts['11'])]
+
+        #    # Send protocol
+        #    udpSend(addr, msg)
+
+    # Recieve recorded from file from recieving unit and display it in the gui
+    # Only display after the audio is played and recorded
+    #if (played == True):
+    #    #recFile = recieveFile(selFile, played)
+    #    startPlay(selFile) 
+    #    played = False 
+    
+        return testData
+
+
+# manageFiles(fileName)
 #   -Adds the buttons 'Download File' and 'Remove File' and executes the commands
-def manageFile(fileName):
+def manageFiles(fileName):
     global filesChanged############################## delete if not used in sidebar
     col1, col2 = st.sidebar.beta_columns(2)
     # Get user name for the path to save the file
@@ -513,3 +566,56 @@ def refresh():
     #   st.empty()
     #    refresh = False
     #else:
+
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Mainbar Code
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+# mainGui(testData)
+#   - Create the assortment of inputs and call to their actions
+def mainGui():
+    # Display the inputs for setting the frequency and sensitivity and send the inputs to the units
+    setSensFreq()
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+MAINBAR LIB
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+# setSensFreq()
+#   -Displays the sensitivity and frequency inputs and changes them accordingly
+def setSensFreq():
+    # User select frequency
+    freq = st.number_input('Please select a frequency in MHz', 
+                            min_value=30.000,    # Minimum value
+                            max_value=87.750,    # Maximum value
+                            value = 73.250,      # Starting value
+                            step = 0.025,
+                            format= '%.3f')      # Step value
+
+    # It is rounded because computer math is annoying 
+    freqStr = str(round(freq, 3))
+
+    # Send the frequency to both radios to set them
+    if st.button('Set Frequency'):
+        # Send the sending unit the change frequency command, and that unit sends the command to the recieving unit
+        msg = '11'.encode() + b'fs' + freqStr[:2].encode() + freqStr[3:].encode()
+        addrF = [unitAddrs['11'], int(unitPorts['11'])]
+        addrF = udpSend(addrF, msg)
+
+    # User select sensitivity
+    sens = st.number_input('Please select a sensitivity in dBm', 
+                            min_value=0,    # Minimum value
+                            max_value=31,   # Maximum value
+                            value = 0,      # Starting value
+                            step = 1,
+                            format= '%f')   # Step value
+
+    # It is rounded because computer math is annoying 
+    sensStr = str(round(sens))
+
+    # Send the sensitivity to set it
+    
+    if st.button('Set Sensitivity'):
+        msg = b'12' + b's' + sensStr.encode()
+        addrS = [unitAddrs['12'], int(unitPorts['12'])]
+        addrS = udpSend(addrS, msg)

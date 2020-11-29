@@ -7,6 +7,10 @@ import streamlit as st  # Streamlit
 
 import socket           # Networking
 import time             # Waiting and time delays
+import getpass          # Get the username to save the file
+import pandas as pd     # handling .csv files and data
+import os               # File saving
+import spur             # Remove file with ssh
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 GLOBAL VARIABLES
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -25,6 +29,7 @@ fileNames       = []       # The current file names
 oldFileNames    = ['None'] # To always save the previous file names
 firstRun        =   True   # To run the udp setup only once
 sock            = ''       # To make a global socket
+refresh         = False    # Toggles to cause a refesh in refresh()
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 INIT Code
@@ -50,9 +55,204 @@ def sidebarGui():
         fileUploader()
     
     # Display the files currently on the unit
-        selFile = displayFiles(True)
-        st.sidebar.text('(Download The File To Listen To It)')
+    selFile = displayFiles(True)
+    st.sidebar.text('(Download The File To Listen To It)')
+    
+    # Remove and download files from the controller
+    manageFile(selFile)
+    
 
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+SIDEBAR LIB
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+# manageFile(fileName)
+#   -Adds the buttons 'Download File' and 'Remove File' and executes the commands
+def manageFile(fileName):
+    global filesChanged############################## delete if not used in sidebar
+    col1, col2 = st.sidebar.beta_columns(2)
+    # Get user name for the path to save the file
+    userName = getpass.getuser()
+    path = 'C:/Users/'+userName+'/Downloads/'
+
+    # Download a file
+    if col1.button('Download File'):
+        # Tell the controller that we want to download a file
+        unitAddr = [unitAddrs['11'], int(unitPorts['11'])]
+        data = b'11gfr' + fileName.encode()
+        addr = udpSend(unitAddr, data)
+
+        with st.spinner('Downloading...'):
+            # Recieve the audio file and save it in the downloads folder
+            tcpRecieveFile(addr, path)
+        
+    
+    # To remove a file
+    if col2.button('Remove File'):
+
+        sshDeleteFile(fileName)
+
+        #fileNames = checkFileList(filesChanged)
+        #displayFiles(True)
+
+        filesChanged = True
+
+        # To reload the file list
+        #refresh()
+        return True
+    
+    return False
+
+# sshDeleteFile(fileName)
+#   Delete a file 'fileName' over the ssh
+def sshDeleteFile(fileName):
+    # Connect
+    shell = spur.SshShell( hostname="10.0.0.134", username="pi", password="sdr")
+    ssh_session = shell._connect_ssh()
+
+    # Remove the file
+    ssh_session.exec_command('sudo rm -f /home/pi/Desktop/ControllerPython/Sounds/'+fileName)
+
+    # Close
+    ssh_session.close()
+
+# tcpRecieveFile()
+#   -Recieve the file from the controller over the TCP channel
+#   -Can be used as a tcp server, but needs to be changed. This is specifically built to recieve a file
+#    from the controller (raspberry pi)
+def tcpRecieveFile(addr, path):
+    saveData = b''
+
+    HOST = addr[0]
+    PORT = addr[1]        # Port to listen on (non-privileged ports are > 1023)
+    buffer = 16384
+    dataCnt = 0
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((HOST, PORT))
+        s.listen()
+        conn, addr = s.accept()
+        with conn:
+            print('Connected by', addr)
+
+            fileName = 'New Name'
+            wholedataLength = 'Will find out'
+            while True:
+                
+                # Recieve the data
+                data = conn.recv(buffer)
+                if (data == b'end'):
+                    break
+                
+                # If this is the first message we recieved, it is a packet containing the data length
+                elif (dataCnt == 0):
+                    # Confirm we recieved the data
+                    conn.sendall(b'Received data length')
+                    wholedataLength = convertToStr(data)
+                    dataCnt += 1
+
+                # Next the file name is being sent
+                elif (dataCnt == 1):
+                    # Save the file name
+                    fileName = data.decode('UTF-8')
+                    conn.sendall(b'Received File Name')
+                    dataCnt += 1
+
+                else:# All other packets are filled with data
+
+                    # Save the data
+                    saveData = saveData + data
+
+                    # Check the data length
+                    saveDataLength = str(len(saveData))
+
+                    print(saveDataLength)
+                    # If we recieved all the data, reply to the client 
+                    if (saveDataLength == wholedataLength):
+                        conn.sendall(b'Recieved all data')
+                        print('done.')
+            
+
+            # Write the data to a file
+            saveFile(fileName, saveData, path)
+
+# saveFile(data)
+#   -Takes in the data, creates a file, and saves it in the file
+def saveFile(fileName, data, path):
+    
+    #path = 'C:/Users/SDR_6/Desktop/gui/tcpAudio/'
+    
+    # Create the file with the desired file name    
+    fileName = createFileName(path, fileName)
+
+    # Save the file in its desired format
+    if (fileName[-4:] == '.wav'):   #.wav
+        # Open the file
+        f = open(path + fileName,'wb')
+
+        # Start writing to the file
+        l = f.write(data)
+        
+        # Closes the file
+        f.close()
+
+    elif(fileName[-4:] == '.csv'):  #.csv
+        pd.DataFrame(data).to_csv(path + fileName)
+
+# createFileName(fileName)
+#   -Checks if the file exists or not, if it exists, add a number to the end
+def createFileName(path, fileName):
+    i = 1
+
+    # Check if the file exists
+    exists = os.path.isfile(path + fileName)
+
+    # Get the origional file name (without the .wav extension)
+    length = len(fileName) - 4
+
+    # If the file already exists
+    if (exists): 
+        while(exists):
+            # Add a number to the suffix of the word to make a new file name
+            fileName = fileName[:length] + '_' + str(i) + fileName[-4:]#'.wav'
+
+            # Check if the new file name already exists
+            exists = os.path.isfile(path + fileName)
+
+            # Increment the number for the next file name
+            i += 1
+
+    # Create the new file with the new file name
+    f = open(path + fileName,'xb')
+
+    return fileName
+
+# convertToStr(bmsg)
+#   -Converts the received bytes into an int string
+def convertToStr(bmsg):
+    msgNum = ''
+    for num in bmsg:
+        if num == 48:  # b'0'
+            msgNum += '0'
+        elif num == 49:  # b'1'
+            msgNum += '1'
+        elif num == 50:  # b'2'
+            msgNum += '2'
+        elif num == 51:  # b'3'
+            msgNum += '3'
+        elif num == 52:  # b'4'
+            msgNum += '4'
+        elif num == 53:  # b'5'
+            msgNum += '5'
+        elif num == 54:  # b'6'
+            msgNum += '6'
+        elif num == 55:  # b'7'
+            msgNum += '7'
+        elif num == 56:  # b'8'
+            msgNum += '8'
+        elif num == 57:  # b'9'
+            msgNum += '9'
+
+    return msgNum
 
 # uploadFile()
 #   Displays a widget that takes in a file and returns its bytes
@@ -174,6 +374,7 @@ def checkFileList(filesChanged):
         while True:
             #Recieve the file names
             msg, ipaddr = udpServer(addr)
+            print(msg)
 
             # The unit always first responds with the following message. Ignore it, its for manual controlling
             if msg != b'You connected to unit 11':
@@ -301,3 +502,14 @@ def tcpSendFile(ipAddr, fileData, fileName, fileProgBar):
             # Close the connection
             s.close()
             print('done.')
+
+# refresh()
+#   -A change in source code causes a reload with the streamlit api
+def refresh():
+    refresh = st.empty()
+    refresh.text("Hello")
+    refresh.empty()
+    #if refresh == True:
+    #   st.empty()
+    #    refresh = False
+    #else:

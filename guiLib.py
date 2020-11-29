@@ -4,13 +4,17 @@ IMPORTS
 
 
 import streamlit as st  # Streamlit
-
+import matplotlib.pyplot as plt 
 import socket           # Networking
 import time             # Waiting and time delays
 import getpass          # Get the username to save the file
 import pandas as pd     # handling .csv files and data
 import os               # File saving
 import spur             # Remove file with ssh
+import wave             # To read a .wav file to plot it
+import numpy as np      # For plotting the .wav file
+import pickle           # To send arrays over tcp
+
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 GLOBAL VARIABLES
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -24,12 +28,25 @@ unitPorts = {
     '12':'1337'
 }
 
-filesChanged    = True     # To run the main gui setup only once
-fileNames       = []       # The current file names
+filesChanged    = True     # To run the main gui setup only once    ################take out########
 oldFileNames    = ['None'] # To always save the previous file names
-firstRun        =   True   # To run the udp setup only once
+
+fileNames       = []       # The current file names
+firstRun        = True   # To run the udp setup only once
 sock            = ''       # To make a global socket
 refresh         = False    # Toggles to cause a refesh in refresh()
+testData        = []
+
+# Inputs
+inSensLines = 0
+
+inSenseHigh = 0
+inSenseStep = 0
+inSenseLow  = 0
+
+inSFreqHigh = 0
+inSFreqStep = 0
+inSFreqLow  = 0
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 INIT Code
@@ -62,6 +79,7 @@ def sidebarGui():
     manageFiles(selFile)
 
     # Run a test
+    global testData
     testData = manageTest(selFile)
     
 
@@ -71,6 +89,7 @@ SIDEBAR LIB
 # manageTest(selFile)
 #   - Displays the 'start playing' and the 'start testing' buttons and activates the respective actions
 def manageTest(selFile):
+    global testData
     testData = None
     with st.sidebar.beta_expander("Test File"):
         col1, col2 = st.beta_columns([2, 2])
@@ -124,8 +143,8 @@ def manageFiles(fileName):
     global filesChanged############################## delete if not used in sidebar
     col1, col2 = st.sidebar.beta_columns(2)
     # Get user name for the path to save the file
-    userName = getpass.getuser()
-    path = 'C:/Users/'+userName+'/Downloads/'
+    #userName = getpass.getuser()
+    #path = 'C:/Users/'+userName+'/Downloads/'
 
     # Download a file
     if col1.button('Download File'):
@@ -136,7 +155,7 @@ def manageFiles(fileName):
 
         with st.spinner('Downloading...'):
             # Recieve the audio file and save it in the downloads folder
-            tcpRecieveFile(addr, path)
+            tcpRecieveFile(addr)
         
     
     # To remove a file
@@ -172,7 +191,7 @@ def sshDeleteFile(fileName):
 #   -Recieve the file from the controller over the TCP channel
 #   -Can be used as a tcp server, but needs to be changed. This is specifically built to recieve a file
 #    from the controller (raspberry pi)
-def tcpRecieveFile(addr, path):
+def tcpRecieveFile(addr):
     saveData = b''
 
     HOST = addr[0]
@@ -224,9 +243,13 @@ def tcpRecieveFile(addr, path):
                         conn.sendall(b'Recieved all data')
                         print('done.')
             
+            # Get user name for the path to save the file
+            userName = getpass.getuser()
+            path = 'C:/Users/'+userName+'/Downloads/'
 
             # Write the data to a file
             saveFile(fileName, saveData, path)
+
 
 # saveFile(data)
 #   -Takes in the data, creates a file, and saves it in the file
@@ -571,15 +594,340 @@ def refresh():
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 Mainbar Code
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-# mainGui(testData)
+# mainGui()
 #   - Create the assortment of inputs and call to their actions
 def mainGui():
+
     # Display the inputs for setting the frequency and sensitivity and send the inputs to the units
     setSensFreq()
+
+    # Display the test configurations and save them to the global variables
+    testConfigs()
+
+    # Display the data aquired from the testing
+    displayData()
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 MAINBAR LIB
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+# displayData(data)
+#   -Display the data for the main gui
+#   -https://datatofish.com/import-csv-file-python-using-pandas/
+def displayData():
+    # Get user name for the path to save the file
+    #userName = getpass.getuser()
+    #path = 'C:/Users/'+userName+'/Downloads/'
+    global testData
+    global fileNames
+    data = testData
+
+    st.title('See Data')
+    selFile = st.selectbox('Select File(s) From Batman to View',fileNames)
+    
+    with st.beta_expander("Sensitivity Data"):
+
+        if (data == None):
+            pass
+        else:
+            dataDict = {}
+            sensitivities = []
+            dataPoints = []
+            datalist = []
+            saveFreqs = []
+
+            for i in range(len(data)):
+                sense = []
+
+                # Get the frequencies used
+                for freq in range(1, len(data[0]), 2):
+                    sense.append(data[0][freq])
+
+                sensitivities.append(sense)
+
+                dataPoints = []
+
+                # Get the data
+                for dat in range(2, len(data[i]), 2):
+                    dataPoints.append(data[i][dat])
+
+                dataDict[data[i][0]] = dataPoints
+
+                datalist.append(dataPoints)
+
+                # A seperate list of frequencies for the dataframe columns
+                saveFreqs.append(data[i][0])
+
+            # Put data into a dict for altair
+            dataAltair = {'Frequencies':saveFreqs,
+                        'Data':datalist,
+                        'Sensitivities':sensitivities}
+            
+            # Create a dataframe
+            #df = pd.DataFrame(
+            #        data    = dataDict,
+            #        index   = sensitivities,
+            #        columns = saveFreqs)
+
+            dfDict = pd.DataFrame.from_dict(
+                    dataDict,
+                    orient='index',
+                    columns = sense)
+
+            # Trying to make an altair chart for more labels
+            #dfDict = pd.DataFrame.from_dict(
+            #        dataAltair,
+            #        orient='index',
+            #       columns = sensitivities)
+            
+            #dfDict = pd.DataFrame.from_dict(
+            #        dataAltair,
+            #        orient='index',
+            #        columns = sensitivities)
+
+            #line_chart = alt.Chart(dfDict).mark_line(interpolate='basis').encode(
+            #                x='MHz:Q',#alt.X('x', title='MHz'),
+            #                y='dBm:Q',#alt.Y('y', title='dBm'),
+            #                color='category:N'
+            #            ).properties(
+            #                title='Sales of consumer goods'
+            #            )       
+
+            # Display the contents as a table in the gui
+            st.write(dfDict)
+            print(dfDict)
+            
+            # Create a line chart of the data in the gui
+            st.line_chart(dfDict, use_container_width=True)
+
+            #st.altair_chart(line_chart, use_container_width=True)
+            
+    with st.beta_expander("Audio Data"):
+            
+            # Download a file
+            if st.button('Load File'):
+                makeAudioPlot(selFile)
+
+            # Make FFT of audio file
+            #makeFFTPlotNew(fileName)
+
+# makeAudioPlot(fileName)
+#   -Takes the downloaded file and displays it as a waveform
+def makeAudioPlot(fileName):
+    # Get user name for the path to save the file
+    #userName = getpass.getuser()
+    #path = 'Sounds\\'
+    # Checks if the audio file exists or not
+    #exists = os.path.isfile(path + fileName)
+    #if exists:
+    st.subheader('Sent Audio Clip')
+    
+    signal,times = getWavData(fileName)
+    # Open the file
+    #spf = wave.open(path + fileName, "r")
+
+    # Extract Raw Audio from Wav File
+    #signal = spf.readframes(-1)
+    #signal = np.fromstring(signal, "Int16")
+
+    # Get time in seconds
+    #fs = spf.getframerate()
+    #times = np.linspace(0, len(signal) / (2*fs) , num=len(signal))
+
+    fig, ax = plt.subplots()
+    ax.plot(times,signal)
+
+    # label the axes
+    plt.ylabel("Amplitude")
+    plt.xlabel("Time(s)")
+
+    # Plot the chart
+    st.pyplot(fig)
+
+# getWavData(fileName)
+#   - Gets the raw wave file data from the unit over a tcp channel
+def getWavData(fileName):
+    # Message
+    unitAddr = [unitAddrs['11'], int(unitPorts['11'])]
+    # Address
+    data = b'11gd' + fileName.encode()
+    # Send
+    addr = udpSend(unitAddr, data)
+
+    saveData = b''
+
+    HOST = '0.0.0.0'
+    PORT = addr[1]
+    buffer = 4096
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((HOST, PORT))
+        s.listen()
+        conn, addr = s.accept()
+        with conn:
+            print('Connected by', addr)
+
+            # Recieve the times######################################################
+            times = []
+            while True:
+                # Recieve the data
+                data = conn.recv(buffer)
+
+                # Check for the end
+                if (data == b'end'):
+                    break
+                
+                # Save it and append
+                times = times + data
+            
+            # Unpack the array brom bytes
+            timesArray = pickle.loads(times)
+
+            # Recieve the data
+            while True:
+                
+                # Recieve the data
+                data = conn.recv(buffer)
+                if (data == b'end'):
+                    break
+
+                else:# All other packets are filled with data
+                    
+                    # Save the data
+                    saveData = saveData + data
+
+                    print(saveData)
+                    # If we recieved all the data, reply to the client 
+                    #if (saveDataLength == wholedataLength):
+                    #    conn.sendall(b'Recieved all data')
+                    #    print('done.')
+            
+            # Unpack the array brom bytes
+            dataArray = pickle.loads(saveData)
+    
+    return dataArray
+
+
+# testConfigs()
+#   -Displays the test configuration inputs
+def testConfigs():
+    st.title('Test Configuration')
+    
+    # Creates columns to organize the inputs
+    sensCol1, sensCol2, sensCol3 = st.beta_columns(3)
+    freqCol1, freqCol2, freqCol3 = st.beta_columns(3)
+
+    with sensCol1:
+        global inSenseHigh
+        inSenseHigh = st.number_input('dBm end', 
+                                        min_value=1,    # Minimum value
+                                        max_value=31,    # Maximum value
+                                        step = 1, 
+                                        value = 10)
+        
+        # Round and convert to string because computer math sucks and we can't index a float
+        inSenseHigh = str(round(inSenseHigh, 3)) + '.'
+
+        # Add a zero to make it a 2 digit number and the decimal
+        while (len(inSenseHigh) < 3):
+            inSenseHigh = inSenseHigh + '0'
+            
+    with sensCol2:
+        global inSenseStep
+        inSenseStep = st.number_input('Step', 
+                                        min_value=1,    # Minimum value
+                                        max_value=31,    # Maximum value
+                                        step = 1, 
+                                        value = 4)
+        
+        # Round and convert to string because computer math sucks and we can't index a float
+        inSenseStep = str(round(inSenseStep, 3)) + '.'
+
+        # Add a zero to make it a 2 digit number
+        while (len(inSenseStep) < 3):
+            inSenseStep = inSenseStep + '0'
+            
+    with sensCol3:
+        global inSenseLow
+        inSenseLow = st.number_input('dBm start', 
+                                        min_value=0,    # Minimum value
+                                        max_value=31,    # Maximum value
+                                        step = 1, 
+                                        value = 0)
+        
+        # Round and convert to string because computer math sucks and we can't index a float
+        inSenseLow = str(round(inSenseLow, 3)) + '.'
+
+        # Add a zero to make it a 2 digit number
+        while (len(inSenseLow) < 3):
+            inSenseLow = inSenseLow + '0'
+        
+    with freqCol1:
+        global inSFreqHigh
+        inSFreqHigh = st.number_input('MHz end', 
+                                min_value=30.000,    # Minimum value
+                                max_value=87.750,    # Maximum value
+                                value = 55.750,      # Starting value
+                                step = 0.025,
+                                format= '%.3f')        # Step value
+        
+        # Round and convert to string because computer math sucks and we can't index a float
+        inSFreqHigh = str(round(inSFreqHigh, 3))
+
+        # Add a zero to make it a 5 digit number
+        while (len(inSFreqHigh) < 6):
+            inSFreqHigh = inSFreqHigh + '0'
+
+    with freqCol2:
+        global inSFreqStep
+        inSFreqStep = st.number_input('Step', 
+                                min_value=0.000,    # Minimum value
+                                max_value=87.750,    # Maximum value
+                                value = 5.000,      # Starting value
+                                step = 0.025,
+                                format= '%.3f')        # Step value
+        # To keep the number of zeros the same for all the frequency numbers, we add to the front
+        intStep = inSFreqStep
+
+        # Round and convert to string because computer math sucks and we can't index a float
+        inSFreqStep = str(round(inSFreqStep, 3))
+        
+        # We add the front zeros here 
+        if (intStep < 10.0):
+            inSFreqStep = '0' + inSFreqStep
+
+        # Add a zero to make it a 5 digit number
+        while (len(inSFreqStep) < 6):
+            inSFreqStep = inSFreqStep + '0'
+
+    with freqCol3:
+        global inSFreqLow
+        inSFreqLow = st.number_input('MHz start', 
+                                min_value=30.000,    # Minimum value
+                                max_value=87.750,    # Maximum value
+                                value = 30.000,      # Starting value
+                                step = 0.025,
+                                format= '%.3f')        # Step value
+        
+        # Round and convert to string because computer math sucks and we can't index a float
+        inSFreqLow = str(round(inSFreqLow, 3))
+
+        # Add a zero to make it a 5 digit number
+        while (len(inSFreqLow) < 6):
+           inSFreqLow = inSFreqLow  + '0'
+
+    #global inSensLines
+    #inSensLines = st.number_input('Number of graph lines', 
+    #                                min_value=1,    # Minimum value
+    #                                max_value=9999,    # Minimum value
+    #                                value = 100,      # Starting value
+    #                                step = 1)
+    ## Round and convert to string because computer math sucks and we can't index a float
+    #inSensLines = str(round(inSensLines, 3)) + '.'
+
+    ## Add a zero to make it a 5 digit number
+    #while (len(inSensLines) < 5):
+    #    inSensLines = inSensLines  + '0'
+
 
 # setSensFreq()
 #   -Displays the sensitivity and frequency inputs and changes them accordingly
@@ -616,6 +964,6 @@ def setSensFreq():
     # Send the sensitivity to set it
     
     if st.button('Set Sensitivity'):
-        msg = b'12' + b's' + sensStr.encode()
-        addrS = [unitAddrs['12'], int(unitPorts['12'])]
+        msg = b'11' + b's' + sensStr.encode()
+        addrS = [unitAddrs['11'], int(unitPorts['11'])]
         addrS = udpSend(addrS, msg)

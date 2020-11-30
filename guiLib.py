@@ -80,15 +80,15 @@ def sidebarGui():
 
     # Run a test
     global testData
-    testData = manageTest(selFile)
+    testData = actionHandler(selFile)
     
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 SIDEBAR LIB
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-# manageTest(selFile)
+# actionHandler(selFile)
 #   - Displays the 'start playing' and the 'start testing' buttons and activates the respective actions
-def manageTest(selFile):
+def actionHandler(selFile):
     global testData
     testData = None
     
@@ -101,7 +101,7 @@ def manageTest(selFile):
         if col1.button('Start Playing'):
             
             # Tell the sending unit to start playing the audio
-            #startPlay(selFile)
+            startPlay(selFile)
 
             #msg, ipaddr = udpServer(addr)
 
@@ -141,6 +141,18 @@ def manageTest(selFile):
 
         return testData
 
+# startPlay(selFile)
+#   - Sends to the radio to play the selected audio
+def startPlay(selFile):
+    # Create ip addresses and port vairables for the UDP port
+    unitAddrPlay    = [unitAddrs['11'], int(unitPorts['11'])]
+    #unitAddrRecord  = [unitAddrs['12'], int(unitPorts['12'])]
+
+    # Send protocol with file name to be played to the first unit
+    udpSend(unitAddrPlay, b'11' + b'ap' + b'000' + selFile.encode())
+
+    # Send the protocol to the second unit to start recording
+    #udpSend(unitAddrRecord, b'12' + b'ar' + selFile.encode())
 
 # manageFiles(fileName)
 #   -Adds the buttons 'Download File' and 'Remove File' and executes the commands

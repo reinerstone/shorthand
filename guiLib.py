@@ -91,18 +91,22 @@ SIDEBAR LIB
 def manageTest(selFile):
     global testData
     testData = None
-    with st.sidebar.beta_expander("Test File"):
-        col1, col2 = st.beta_columns([2, 2])
+    
+    #with st.sidebar.beta_expander("Test File"):
+    with st.sidebar.beta_container():
+    
+        col1, col2 = st.beta_columns(2)
+        
         # If the button was clicked
         if col1.button('Start Playing'):
             
             # Tell the sending unit to start playing the audio
-            startPlay(selFile)
+            #startPlay(selFile)
 
             #msg, ipaddr = udpServer(addr)
 
             # Tell the recieving unit to start waiting for a signal
-            recFile = recieveFile(selFile)
+            #recFile = recieveFile(selFile)
 
             #for unit in selFile:
             st.sidebar.success('Playing the Audio File')
@@ -117,7 +121,8 @@ def manageTest(selFile):
 
         # If the button was clicked, stop the playing
         if col2.button('Start Testing'):
-            testData = startTest(selFile)
+            #testData = startTest(selFile)
+            pass
 
         ## If the button was clicked, stop the playing
         #if col2.button('Stop Testing'):
@@ -127,13 +132,13 @@ def manageTest(selFile):
         #    # Send protocol
         #    udpSend(addr, msg)
 
-    # Recieve recorded from file from recieving unit and display it in the gui
-    # Only display after the audio is played and recorded
-    #if (played == True):
-    #    #recFile = recieveFile(selFile, played)
-    #    startPlay(selFile) 
-    #    played = False 
-    
+        # Recieve recorded from file from recieving unit and display it in the gui
+        # Only display after the audio is played and recorded
+        #if (played == True):
+        #    #recFile = recieveFile(selFile, played)
+        #    startPlay(selFile) 
+        #    played = False 
+
         return testData
 
 
@@ -622,7 +627,7 @@ def displayData():
     data = testData
 
     st.title('See Data')
-    selFile = st.selectbox('Select File(s) From Batman to View',fileNames)
+    #selFile = st.selectbox('Select File(s) From Batman to View',fileNames)
     
     with st.beta_expander("Sensitivity Data"):
 
@@ -702,37 +707,27 @@ def displayData():
             #st.altair_chart(line_chart, use_container_width=True)
             
     with st.beta_expander("Audio Data"):
-            
-            # Download a file
-            if st.button('Load File'):
-                makeAudioPlot(selFile)
+        # Create columns
+        col1, col2 = st.beta_columns([3, 1])
 
-            # Make FFT of audio file
-            #makeFFTPlotNew(fileName)
+        # Download a file
+        selFile = col1.selectbox('Select File(s) From Batman to View',fileNames)
+        col2.title('')
+        if col2.button('Load File'):
+            makeAudioPlot(selFile)
+
+        # Make FFT of audio file
+        #makeFFTPlotNew(fileName)
 
 # makeAudioPlot(fileName)
 #   -Takes the downloaded file and displays it as a waveform
 def makeAudioPlot(fileName):
-    # Get user name for the path to save the file
-    #userName = getpass.getuser()
-    #path = 'Sounds\\'
-    # Checks if the audio file exists or not
-    #exists = os.path.isfile(path + fileName)
-    #if exists:
-    st.subheader('Sent Audio Clip')
+    st.subheader('Origional Audio')
     
-    signal,times = getWavData(fileName)
-    # Open the file
-    #spf = wave.open(path + fileName, "r")
+    # Get data from the raspberry pi
+    signal, times = getWavData(fileName)
 
-    # Extract Raw Audio from Wav File
-    #signal = spf.readframes(-1)
-    #signal = np.fromstring(signal, "Int16")
-
-    # Get time in seconds
-    #fs = spf.getframerate()
-    #times = np.linspace(0, len(signal) / (2*fs) , num=len(signal))
-
+    # Make the plots
     fig, ax = plt.subplots()
     ax.plot(times,signal)
 
@@ -766,45 +761,47 @@ def getWavData(fileName):
         with conn:
             print('Connected by', addr)
 
-            # Recieve the times######################################################
-            times = []
-            while True:
-                # Recieve the data
-                data = conn.recv(buffer)
+            # Recieve the times
+            times = b''
+            with st.spinner('Loading from the unit...(this can take a while if the file is large)'):
+                # First we are getting the times array (x axis)
+                while True:
+                    # Recieve the data
+                    data = conn.recv(buffer)
+                    #print(data)
 
-                # Check for the end
-                if (data == b'end'):
-                    break
+                    # Check for the end
+                    if (data[-4:] == b'done'):
+                        print('Done.')
+                        # Save it and append
+                        times = times + data[:-4]
+                        conn.send(b'done')
+                        break
+                    else:
+                        # Save it and append
+                        times = times + data
                 
-                # Save it and append
-                times = times + data
-            
-            # Unpack the array brom bytes
-            timesArray = pickle.loads(times)
+                # Unpack the array brom bytes
+                timesArray = pickle.loads(times)
 
-            # Recieve the data
-            while True:
-                
-                # Recieve the data
-                data = conn.recv(buffer)
-                if (data == b'end'):
-                    break
-
-                else:# All other packets are filled with data
+                # Second we are getting the graph data (y axis)
+                while True:
+                    # Recieve the data
+                    data = conn.recv(buffer)
                     
-                    # Save the data
-                    saveData = saveData + data
-
-                    print(saveData)
-                    # If we recieved all the data, reply to the client 
-                    #if (saveDataLength == wholedataLength):
-                    #    conn.sendall(b'Recieved all data')
-                    #    print('done.')
-            
-            # Unpack the array brom bytes
-            dataArray = pickle.loads(saveData)
+                    # Check for the end
+                    if (data[-4:] == b'done'):
+                        print('Done.')
+                        # Save it and append
+                        saveData = saveData + data[:-4]
+                        break
+                    else:
+                        saveData = saveData + data
+                
+                # Unpack the array brom bytes
+                dataArray = pickle.loads(saveData)
     
-    return dataArray
+    return dataArray, timesArray
 
 
 # testConfigs()

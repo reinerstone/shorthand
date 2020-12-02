@@ -79,8 +79,9 @@ def sidebarGui():
     manageFiles(selFile)
 
     # Run a test
-    global testData
-    testData = actionHandler(selFile)
+    #global testData
+    #testData = actionHandler(selFile)
+    actionHandler(selFile)
     
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -99,17 +100,16 @@ def actionHandler(selFile):
         
         # If the button was clicked
         if col1.button('Start Playing'):
+
+            with st.spinner('Playing...'):
+
+                # Tell the sending unit to start playing the audio
+                startPlay(selFile)
+
+                # Tell the recieving unit to start waiting for a signal
+                recFile = recieveFile(selFile)
+
             
-            # Tell the sending unit to start playing the audio
-            startPlay(selFile)
-
-            #msg, ipaddr = udpServer(addr)
-
-            # Tell the recieving unit to start waiting for a signal
-            #recFile = recieveFile(selFile)
-
-            #for unit in selFile:
-            st.sidebar.success('Playing the Audio File')
 
         ## If the button was clicked, stop the playing
         #if col2.button('Stop Playing'):
@@ -139,7 +139,7 @@ def actionHandler(selFile):
         #    startPlay(selFile) 
         #    played = False 
 
-        return testData
+        #return testData
 
 # startPlay(selFile)
 #   - Sends to the radio to play the selected audio
@@ -153,6 +153,24 @@ def startPlay(selFile):
 
     # Send the protocol to the second unit to start recording
     #udpSend(unitAddrRecord, b'12' + b'ar' + selFile.encode())
+
+# recieveFile(fileName)
+#   - Download the 
+def recieveFile(fileName):
+    # Get user name for the path to save the file
+    #userName = getpass.getuser()
+    #path = 'C:/Users/'+userName+'/Downloads/'
+
+    fileName = 'RECORDED' + fileName
+
+    # Tell the controller that we want to download a file
+    unitAddr = [unitAddrs['12'], int(unitPorts['12'])]
+    data = b'12gfr' + fileName.encode()
+    addr = udpSend(unitAddr, data)
+
+    # Recieve the audio file and save it in the downloads folder
+    tcpRecieveFile(addr)
+
 
 # manageFiles(fileName)
 #   -Adds the buttons 'Download File' and 'Remove File' and executes the commands
@@ -720,13 +738,26 @@ def displayData():
             
     with st.beta_expander("Audio Data"):
         # Create columns
-        col1, col2 = st.beta_columns([3, 1])
+        col1, col2, col3, col4 = st.beta_columns([2, 2, 1, 1])
 
-        # Download a file
-        selFile = col1.selectbox('Select File(s) From Batman to View',fileNames)
-        col2.title('')
-        if col2.button('Load File'):
-            makeAudioPlot(selFile)
+        # Select the first files
+        selFile1 = col1.selectbox('Select First File From Batman',fileNames)
+
+        # Select the second file
+        selFile2 = col2.selectbox('Select Second File From Batman',fileNames)
+
+        # Select the plot type
+        selCol = col3.radio("What do you want?",
+                        ('Layered Plot','Seperate Plots'))
+
+        if (selCol == 'Layered Plot'):
+            pass
+        elif(selCol == 'Seperate Plot'):
+            pass
+        # Make the plots
+        col4.title('')
+        if col4.button('Load File'):
+            makeAudioPlot(selFile1)
 
         # Make FFT of audio file
         #makeFFTPlotNew(fileName)

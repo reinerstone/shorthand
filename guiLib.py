@@ -98,7 +98,7 @@ def actionHandler(selFile):
         col1, col2 = st.beta_columns(2)
         
         # If the button was clicked
-        if col1.button('Start Playing'):
+        if col1.button('Run Audio Test'):
 
             with st.spinner('Playing...'):
 
@@ -119,7 +119,7 @@ def actionHandler(selFile):
         #    udpSend(addr, msg)
 
         # If the button was clicked, stop the playing
-        if col2.button('Start Testing'):
+        if col2.button('Run Att. Test'):
             testData = startTest(selFile)
             pass
 
@@ -259,7 +259,7 @@ def manageFiles(fileName):
     # To remove a file
     if col2.button('Remove File'):
 
-        sshDeleteFile(fileName)
+        sshDeleteFile(fileName, 'sounds')
 
         #fileNames = checkFileList(filesChanged)
         #displayFiles(True)
@@ -274,13 +274,19 @@ def manageFiles(fileName):
 
 # sshDeleteFile(fileName)
 #   Delete a file 'fileName' over the ssh
-def sshDeleteFile(fileName):
+def sshDeleteFile(fileName, fileType):
     # Connect
     shell = spur.SshShell( hostname="10.0.0.134", username="pi", password="sdr")
     ssh_session = shell._connect_ssh()
 
+     # Where is the file located on the unit?
+    if (fileType == 'recordings'):
+        path = '/home/pi/Desktop/ControllerPython/Recordings/'
+    else:
+        path = '/home/pi/Desktop/ControllerPython/Sounds/'
+
     # Remove the file
-    ssh_session.exec_command('sudo rm -f /home/pi/Desktop/ControllerPython/Sounds/'+fileName)
+    ssh_session.exec_command('sudo rm -f ' + path + fileName)
 
     # Close
     ssh_session.close()
@@ -480,11 +486,11 @@ def fileUploader():
                 fileProgBar = st.progress(0)
 
                 # Turn on the controllers tcp server
-                udpSend(ipAddr, udpMsg)
+                addr = udpSend(ipAddr, udpMsg)
                 fileProgBar.progress(10)
 
                 # Send file over tcp
-                tcpSendFile(ipAddr, fileByteArray[k], fileData[k].name, fileProgBar)  
+                tcpSendFile(addr, fileByteArray[k], fileData[k].name, fileProgBar)  
                 fileProgBar.progress(90)
 
                 # Give the server time to close the connection DO NOT DELETE PLEASE, it gave me problems
@@ -629,12 +635,13 @@ def tcpSendFile(ipAddr, fileData, fileName, fileProgBar):
     fileDataLength = str(len(fileData))
     print("Length of data: " + fileDataLength)
 
-    HOST = ipAddr[0]     # Ip address of the target server (where to send)
+    HOST = '10.0.0.134'     # Ip address of the target server (where to send)
     PORT = ipAddr[1]     # Port of the target server(where to send)
 
     # Open the socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # Connect to the tcp server (the gui)
+        time.sleep(1)
         s.connect((HOST, PORT))
 
         # Send the length of the data in the beginning
@@ -726,51 +733,51 @@ def displayData():
     st.title('See Data')
     #selFile = st.selectbox('Select File(s) From Batman to View',fileNames)
     
-    with st.beta_expander("Sensitivity Data"):
+    #with st.beta_expander("Sensitivity Data"):
 
-        if (data == None):
-            st.warning('Run a test to see data')
-            pass
-        else:
-            dataDict = {}
-            sensitivities = []
+    if (data == None):
+        st.warning('Run a test to see data')
+        pass
+    else:
+        dataDict = {}
+        sensitivities = []
+        dataPoints = []
+        datalist = []
+        saveFreqs = []
+
+        for i in range(len(data)):
+            sense = []
+
+            # Get the frequencies used
+            for freq in range(1, len(data[0]), 2):
+                sense.append(data[0][freq])
+
+            sensitivities.append(sense)
+
             dataPoints = []
-            datalist = []
-            saveFreqs = []
 
-            for i in range(len(data)):
-                sense = []
+            # Get the data
+            for dat in range(2, len(data[i]), 2):
+                dataPoints.append(data[i][dat])
 
-                # Get the frequencies used
-                for freq in range(1, len(data[0]), 2):
-                    sense.append(data[0][freq])
+            dataDict[data[i][0]] = dataPoints
 
-                sensitivities.append(sense)
+            datalist.append(dataPoints)
 
-                dataPoints = []
+            # A seperate list of frequencies for the dataframe columns
+            saveFreqs.append(data[i][0])
 
-                # Get the data
-                for dat in range(2, len(data[i]), 2):
-                    dataPoints.append(data[i][dat])
+        dfDict = pd.DataFrame.from_dict(
+                dataDict,
+                orient='index',
+                columns = sense)
 
-                dataDict[data[i][0]] = dataPoints
+        col1, col2 = st.beta_columns([3,1])
+        # Create a line chart of the data in the gui
+        col1.line_chart(dfDict, use_container_width=True)
 
-                datalist.append(dataPoints)
-
-                # A seperate list of frequencies for the dataframe columns
-                saveFreqs.append(data[i][0])
-
-            dfDict = pd.DataFrame.from_dict(
-                    dataDict,
-                    orient='index',
-                    columns = sense)
-
-            col1, col2 = st.beta_columns([3,1])
-            # Create a line chart of the data in the gui
-            col1.line_chart(dfDict, use_container_width=True)
-
-            # Display the contents as a table in the gui
-            col2.write(dfDict)
+        # Display the contents as a table in the gui
+        col2.write(dfDict)
             
             
 
@@ -796,6 +803,12 @@ def displayData():
 
         # Select the second file
         selFile2 = col2.selectbox('Select Recording File From Batman',recordedFileNames)
+        
+        # Remove file button
+        # To remove a file
+        if col2.button('Remove File', key='remove recording'):
+
+            sshDeleteFile(selFile2, 'recordings')
 
         # Select the plot type
         selCol = col3.radio("What do you want?",
@@ -809,7 +822,7 @@ def displayData():
 # makeAudioPlot(fileName)
 #   -Takes the downloaded file and displays it as a waveform
 def makeAudioPlot(selFile1, selFile2, selCol):
-    st.subheader('Origional Audio')
+    st.subheader('Original Audio')
     
     # Get data from the raspberry pi
     signal1, times1 = getWavData(selFile1)

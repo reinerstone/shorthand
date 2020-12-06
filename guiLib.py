@@ -28,17 +28,16 @@ unitPorts = {
     '12':'1337'
 }
 
-filesChanged    = True     # To run the main gui setup only once    ################take out########
-oldFileNames    = ['None'] # To always save the previous file names
-
+filesChanged    = True     # To run the main gui setup only once    ################take out
 fileNames       = []       # The current file names
-firstRun        = True   # To run the udp setup only once
+recordedFileNames = []     # List of the recorded files
+firstRun        = True     # To run the udp setup only once
 sock            = ''       # To make a global socket
 refresh         = False    # Toggles to cause a refesh in refresh()
 testData        = []
 
 # Inputs
-inSensLines = 0
+#inSensLines = 0
 
 inSenseHigh = 0
 inSenseStep = 0
@@ -107,7 +106,7 @@ def actionHandler(selFile):
                 startPlay(selFile)
 
                 # Tell the recieving unit to start waiting for a signal
-                recFile = recieveFile(selFile)
+                #recFile = recieveFile(selFile)
 
             
 
@@ -121,7 +120,7 @@ def actionHandler(selFile):
 
         # If the button was clicked, stop the playing
         if col2.button('Start Testing'):
-            #testData = startTest(selFile)
+            testData = startTest(selFile)
             pass
 
         ## If the button was clicked, stop the playing
@@ -139,7 +138,71 @@ def actionHandler(selFile):
         #    startPlay(selFile) 
         #    played = False 
 
-        #return testData
+        return testData
+
+# startTest(selFile)
+#   -
+def startTest(selFile):
+    # Create ip addresses and port vairables for the UDP port
+    unitAddrPlay    = [unitAddrs['11'], int(unitPorts['11'])]
+    unitAddrRecord  = [unitAddrs['12'], int(unitPorts['12'])]
+    
+    with st.spinner('Running Test...'):
+        # Send protocol with file name to be played to the first unit
+        addrPlay = udpSend(unitAddrPlay, b'11' + 
+                            b'at' +
+                            inSenseHigh.encode() + 
+                            inSenseStep.encode() + 
+                            inSenseLow.encode()  + 
+                            inSFreqHigh.encode() + 
+                            inSFreqStep.encode() + 
+                            inSFreqLow.encode()  +
+                            #inSensLines.encode() +
+                            unitAddrRecord[0].encode() +
+                            str(unitAddrRecord[1]).encode() + #str(unitAddrRecord[1]).encode() +
+                            selFile.encode())
+        
+        # Tell the second unit we are running a test
+        #addrRecord = udpSend(unitAddrRecord, b'12' + b'at')
+        
+        # Recieve the 'done' message
+        msg, ipaddr = udpServer(addrPlay)
+
+        # Start the tcp to recieve the array
+        sensData = tcpReceiveArray(ipaddr)
+
+        # Get the path to save it 
+        # Get user name for the path to save the file
+        #userName = getpass.getuser()
+        #path = 'C:/Users/'+userName+'/Downloads/'
+
+        # Save the file as a .csv file
+        #saveFile('sensitivityData.csv', sensData, path)
+
+        return sensData
+
+# tcpReceiveArray()
+#   - Recieve an array over the tcp
+def tcpReceiveArray(addr):
+    HOST = '0.0.0.0'
+    PORT = 1338
+    
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        #hostname = socket.gethostname()    
+        #addr = socket.gethostbyname(hostname)  
+        #laddr = socket.getsockname()
+
+        s.bind((HOST, addr[1]))
+        s.listen()
+        conn, addr = s.accept()
+
+        # The buffer is huge because I didn't do the calculation of the maximum array size possible
+        data = conn.recv(65536) 
+        
+        # Unpack the array brom bytes
+        dataArray = pickle.loads(data)
+
+        return dataArray
 
 # startPlay(selFile)
 #   - Sends to the radio to play the selected audio
@@ -446,66 +509,70 @@ def displayFiles(filesChanged):
     # To make sure we have all the files and nothing was lost over the udp, '10000000' is arbitrary. Just a really high number
     numNames = '10000000'
     while len(fileNames) < int(numNames):
-        fileNames, numNames = checkFileList(filesChanged)
+        fileNames, numNames = checkFileList('sounds')
 
         # If for some reason we get no names, do it again
         if fileNames != []:
 
             # If I get bytes instead of strings, get another list
             while type(fileNames[0]) == type(b'byte'):
-                fileNames, numNames = checkFileList(True)
+                fileNames, numNames = checkFileList(True, 'sounds')
         
 
     # Create a menu with the file names to be selected
-    selFile = st.sidebar.selectbox('Select a File(s) From Batman',fileNames)
+        selFile = st.sidebar.selectbox('Select a File(s) From Batman',fileNames)
 
-    return selFile
+        return selFile
 
-# checkFileList(filesChanged)
-#   -Retrieves a list of file names from the '11'unit
-def checkFileList(filesChanged):
+    # checkFileList(filesChanged)
+    #   -Retrieves a list of file names from the '11'unit
+def checkFileList(listType):
 
-    global fileNames
-    global oldFileNames
+    #global fileNames
     numNames = 10000000
 
-    if filesChanged:
-        unit = '11'
-        fileNames = []
+    #if filesChanged:
+    unit = '11'
+    fileNames = []
 
-        # Recieve the addresses for the selected units
-        unitAddr = [unitAddrs[unit], int(unitPorts[unit])]
-        data = unit.encode() + b'gla'
+    # Recieve the addresses for the selected units
+    unitAddr = [unitAddrs[unit], int(unitPorts[unit])]
 
-        # Send the message to the unit
-        addr = udpSend(unitAddr, data)
+    # Where is the file located on the unit?
+    if (listType == 'recordings'):
+        data = unit.encode() + b'glar'  # In the 'Recordings'folder
+    else:
+        data = unit.encode() + b'glas'  # In the 'Sounds' folder
 
-        # Loop until the whole list is recieved
-        cnt = 0
-        while True:
-            #Recieve the file names
-            msg, ipaddr = udpServer(addr)
-            print(msg)
+    # Send the message to the unit
+    addr = udpSend(unitAddr, data)
 
-            # The unit always first responds with the following message. Ignore it, its for manual controlling
-            if msg != b'You connected to unit 11':
-                
-                # If the unit is done
-                if msg == b'done':
-                    break
+    # Loop until the whole list is recieved
+    cnt = 0
+    while True:
+        #Recieve the file names
+        msg, ipaddr = udpServer(addr)
+        print(msg)
+
+        # The unit always first responds with the following message. Ignore it, its for manual controlling
+        if msg != b'You connected to unit 11':
             
-                if cnt == 0:
-                    # First get the amount of files we are to get
-                    numNames = msg.decode('ascii')
-                    cnt += 1
-                else:
-                    # Add the names to the list
-                    fileNames.append(msg)
-                
+            # If the unit is done
+            if msg == b'done':
+                break
+        
+            if cnt == 0:
+                # First get the amount of files we are to get
+                numNames = msg.decode('ascii')
+                cnt += 1
+            else:
+                # Add the names to the list
+                fileNames.append(msg)
+            
 
-        # Convert the list of file names from bytes to string
-        for index in range(len(fileNames)):
-            fileNames[index] = fileNames[index].decode('ascii')
+    # Convert the list of file names from bytes to string
+    for index in range(len(fileNames)):
+        fileNames[index] = fileNames[index].decode('ascii')
 
     return fileNames, numNames
 
@@ -662,6 +729,7 @@ def displayData():
     with st.beta_expander("Sensitivity Data"):
 
         if (data == None):
+            st.warning('Run a test to see data')
             pass
         else:
             dataDict = {}
@@ -692,89 +760,76 @@ def displayData():
                 # A seperate list of frequencies for the dataframe columns
                 saveFreqs.append(data[i][0])
 
-            # Put data into a dict for altair
-            dataAltair = {'Frequencies':saveFreqs,
-                        'Data':datalist,
-                        'Sensitivities':sensitivities}
-            
-            # Create a dataframe
-            #df = pd.DataFrame(
-            #        data    = dataDict,
-            #        index   = sensitivities,
-            #        columns = saveFreqs)
-
             dfDict = pd.DataFrame.from_dict(
                     dataDict,
                     orient='index',
                     columns = sense)
 
-            # Trying to make an altair chart for more labels
-            #dfDict = pd.DataFrame.from_dict(
-            #        dataAltair,
-            #        orient='index',
-            #       columns = sensitivities)
-            
-            #dfDict = pd.DataFrame.from_dict(
-            #        dataAltair,
-            #        orient='index',
-            #        columns = sensitivities)
-
-            #line_chart = alt.Chart(dfDict).mark_line(interpolate='basis').encode(
-            #                x='MHz:Q',#alt.X('x', title='MHz'),
-            #                y='dBm:Q',#alt.Y('y', title='dBm'),
-            #                color='category:N'
-            #            ).properties(
-            #                title='Sales of consumer goods'
-            #            )       
+            col1, col2 = st.beta_columns([3,1])
+            # Create a line chart of the data in the gui
+            col1.line_chart(dfDict, use_container_width=True)
 
             # Display the contents as a table in the gui
-            st.write(dfDict)
-            print(dfDict)
+            col2.write(dfDict)
             
-            # Create a line chart of the data in the gui
-            st.line_chart(dfDict, use_container_width=True)
+            
 
-            #st.altair_chart(line_chart, use_container_width=True)
             
     with st.beta_expander("Audio Data"):
         # Create columns
         col1, col2, col3, col4 = st.beta_columns([2, 2, 1, 1])
 
         # Select the first files
-        selFile1 = col1.selectbox('Select First File From Batman',fileNames)
+        selFile1 = col1.selectbox('Select Audio File From Batman',fileNames)
+
+        # Retrieve the list of recordings from the unit
+        global recordedFileNames
+        # To make sure we have all the files and nothing was lost over the udp, '10000000' is arbitrary. Just a really high number
+        numNames = '10000000'
+        while len(recordedFileNames) < int(numNames):
+            recordedFileNames, numNames = checkFileList('recordings')
+            # If for some reason we get no names, do it again
+            if recordedFileNames != []:
+                # If I get bytes instead of strings, get another list
+                while type(recordedFileNames[0]) == type(b'byte'):
+                    recordedFileNames, numNames = checkFileList('recordings')
 
         # Select the second file
-        selFile2 = col2.selectbox('Select Second File From Batman',fileNames)
+        selFile2 = col2.selectbox('Select Recording File From Batman',recordedFileNames)
 
         # Select the plot type
         selCol = col3.radio("What do you want?",
                         ('Layered Plot','Seperate Plots'))
 
-        if (selCol == 'Layered Plot'):
-            pass
-        elif(selCol == 'Seperate Plot'):
-            pass
         # Make the plots
         col4.title('')
         if col4.button('Load File'):
-            makeAudioPlot(selFile1)
-
-        # Make FFT of audio file
-        #makeFFTPlotNew(fileName)
+            makeAudioPlot(selFile1, selFile2, selCol)
 
 # makeAudioPlot(fileName)
 #   -Takes the downloaded file and displays it as a waveform
-def makeAudioPlot(fileName):
+def makeAudioPlot(selFile1, selFile2, selCol):
     st.subheader('Origional Audio')
     
     # Get data from the raspberry pi
-    signal, times = getWavData(fileName)
+    signal1, times1 = getWavData(selFile1)
+    signal2, times2 = getWavData(selFile2)
 
     # Make the plots
-    fig, ax = plt.subplots()
-    ax.plot(times,signal)
+    
 
-    # label the axes
+    if (selCol == 'Layered Plot'):
+        fig, ax = plt.subplots()
+        ax.plot(times1,signal1)
+        ax.plot(times2,signal2)
+    else:
+        fig, ax = plt.subplots(2)
+        ax[0].plot(times1,signal1)
+        ax[1].plot(times2,signal2)
+        #plt.title('Signal Wave...')
+
+    # labels
+
     plt.ylabel("Amplitude")
     plt.xlabel("Time(s)")
 

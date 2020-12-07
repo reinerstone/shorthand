@@ -19,7 +19,14 @@ import ptvsd
 ptvsd.enable_attach(address=('localhost', 5678))
 ptvsd.wait_for_attach() # Only include this line if you always wan't to attach the debugger
 
+#import threading
+
 # ----------------------------------Main code-------------------------------------------
+# Creates a thread for the server
+#threadMain = threading.Thread(target=guiLib.checkIn)
+#threadMain.start()
+
+#guiLib.checkIn()
 
 guiLib.sidebarGui()
 

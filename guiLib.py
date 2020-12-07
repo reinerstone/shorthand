@@ -14,6 +14,7 @@ import spur             # Remove file with ssh
 import wave             # To read a .wav file to plot it
 import numpy as np      # For plotting the .wav file
 import pickle           # To send arrays over tcp
+import threading        # Udp servers in check in
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 GLOBAL VARIABLES
@@ -27,6 +28,12 @@ unitPorts = {
     '11':'1337',
     '12':'1337'
 }
+
+masterAddr = ['10.0.0.134']
+slaveAddrs = ['10.0.0.206']
+
+masterAddrConn = []
+slaveAddrsConn = []
 
 filesChanged    = True     # To run the main gui setup only once    ################take out
 fileNames       = []       # The current file names
@@ -57,6 +64,28 @@ def udpSetup():
         sock = udpServer(['0.0.0.0', 1337])
         firstRun = False
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+CHECK IN CODE
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+#def checkIn():
+
+    #for address in slaveAddrs:
+    #    # Send the check in and get the local address
+    #    laddr = udpSend(address, "ci")
+
+
+    #    msg, ipaddr = udpServer(1339)
+        
+
+
+
+    ## Add the address to the master address spot or the slave address spots
+    ##if (data == b'master'):
+    #    masterAddr.apppend(addr[0])
+    #elif (data == b'slave'):
+    #    slaveAddrs.apppend(addr[0])
+            
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 Sidebar Code
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 # sidebarGui()
@@ -64,15 +93,17 @@ Sidebar Code
 def sidebarGui():
     # First update the displayed file list when the page loads
     # So the file list won't update on changes that are unrelated such as frequency or testing
-    st.sidebar.title('Run a Test')
+    #st.sidebar.title('Actions')
+    
 
     # Display the file uploader in an expander
     with st.sidebar.beta_expander("Upload File to Unit"):
         fileUploader()
     
+    st.sidebar.subheader('Actions')
     # Display the files currently on the unit
     selFile = displayFiles(True)
-    st.sidebar.text('(Download The File To Listen To It)')
+    #st.sidebar.text('(Download The File To Listen To It)')
     
     # Remove and download files from the controller
     manageFiles(selFile)
@@ -99,11 +130,13 @@ def actionHandler(selFile):
         
         # If the button was clicked
         if col1.button('Run Audio Test'):
-
+            
             with st.spinner('Playing...'):
-
-                # Tell the sending unit to start playing the audio
-                startPlay(selFile)
+                try:
+                    # Tell the sending unit to start playing the audio
+                    startPlay(selFile)
+                except:
+                    pass
 
                 # Tell the recieving unit to start waiting for a signal
                 #recFile = recieveFile(selFile)
@@ -120,8 +153,10 @@ def actionHandler(selFile):
 
         # If the button was clicked, stop the playing
         if col2.button('Run Att. Test'):
-            testData = startTest(selFile)
-            pass
+            try:
+                testData = startTest(selFile)
+            except:
+                pass
 
         ## If the button was clicked, stop the playing
         #if col2.button('Stop Testing'):
@@ -246,15 +281,20 @@ def manageFiles(fileName):
 
     # Download a file
     if col1.button('Download File'):
-        # Tell the controller that we want to download a file
-        unitAddr = [unitAddrs['11'], int(unitPorts['11'])]
-        data = b'11gfr' + fileName.encode()
-        addr = udpSend(unitAddr, data)
+        try:
+            # Tell the controller that we want to download a file
+            unitAddr = [unitAddrs['11'], int(unitPorts['11'])]
+            data = b'11gfr' + fileName.encode()
+            addr = udpSend(unitAddr, data)
 
-        with st.spinner('Downloading...'):
-            # Recieve the audio file and save it in the downloads folder
-            tcpRecieveFile(addr)
-        
+            with st.spinner('Downloading...'):
+                
+                # Recieve the audio file and save it in the downloads folder
+                #tcpRecieveFile(addr)
+                tcpThread = threading.Thread(target=tcpRecieveFile, args=(addr,))
+                tcpThread.start()
+        except:
+            st.sidebar.warning('There currently are no audio files uploaded to the Batman.')
     
     # To remove a file
     if col2.button('Remove File'):
@@ -285,8 +325,11 @@ def sshDeleteFile(fileName, fileType):
     else:
         path = '/home/pi/Desktop/ControllerPython/Sounds/'
 
-    # Remove the file
-    ssh_session.exec_command('sudo rm -f ' + path + fileName)
+    try:
+        # Remove the file
+        ssh_session.exec_command('sudo rm -f ' + path + fileName)
+    except:
+        st.warning('There are no recordings to remove')
 
     # Close
     ssh_session.close()
@@ -448,58 +491,59 @@ def fileUploader():
     # Only look at the files if the user is done selecting files
     #   -Just leave the button in, it's there for a reason.
     if st.button('Upload files'):
+        try:
+            filesChanged = True
+            # Create an empty lise to save the data
+            fileData = []
+            fileByteArray = []
 
-        filesChanged = True
-        # Create an empty lise to save the data
-        fileData = []
-        fileByteArray = []
+            # When we call the .read() method, we can only do it once per file, i dont know why but its a bug in the API.
+            # So I save the files in a list so I can check if there is data in the "if uploadedFiles[0].read() == b'': " code
+            k = 0       # A counter for each file sent
+            for uploadedFile in uploadedFiles:
+                # Read file as bytes:
+                fileData.append(uploadedFile)
+                fileByteArray.append(fileData[k].read())
+                k+=1
 
-        # When we call the .read() method, we can only do it once per file, i dont know why but its a bug in the API.
-        # So I save the files in a list so I can check if there is data in the "if uploadedFiles[0].read() == b'': " code
-        k = 0       # A counter for each file sent
-        for uploadedFile in uploadedFiles:
-            # Read file as bytes:
-            fileData.append(uploadedFile)
-            fileByteArray.append(fileData[k].read())
-            k+=1
+            # In case there is a glitch in the API
+            if (fileByteArray == []):
+                st.warning('You need to select file(s).')
+            elif (fileByteArray[0] == b''):
+                # Notify that the files were uploaded
+                st.warning('Files are already uploaded. Please reselect files.')
+            else:
+                # UDP protcol message for the controller, please see README.txt
+                udpMsg = b'gfs'
+                ipAddr = ['','']
 
-        # In case there is a glitch in the API
-        if (fileByteArray == []):
-            st.warning('You need to select file(s).')
-        elif (fileByteArray[0] == b''):
-            # Notify that the files were uploaded
-            st.warning('Files are already uploaded. Please reselect files.')
-        else:
-            # UDP protcol message for the controller, please see README.txt
-            udpMsg = b'gfs'
-            ipAddr = ['','']
+                # Create the udp protocol message for the controller
+                udpMsg = unitsSelected.encode() + b'gfs'
 
-            # Create the udp protocol message for the controller
-            udpMsg = unitsSelected.encode() + b'gfs'
+                # Save the address and the port for the server and client to send to
+                ipAddr[0] = unitAddrs.get(unitsSelected)
+                ipAddr[1] = int(unitPorts.get(unitsSelected))
 
-            # Save the address and the port for the server and client to send to
-            ipAddr[0] = unitAddrs.get(unitsSelected)
-            ipAddr[1] = int(unitPorts.get(unitsSelected))
+                # Tell the controller a file is going to be sent so it can turn on its tcp server
+                for k in range(len(fileData)):
+                    fileProgBar = st.progress(0)
 
-            # Tell the controller a file is going to be sent so it can turn on its tcp server
-            for k in range(len(fileData)):
-                fileProgBar = st.progress(0)
+                    # Turn on the controllers tcp server
+                    addr = udpSend(ipAddr, udpMsg)
+                    fileProgBar.progress(10)
 
-                # Turn on the controllers tcp server
-                addr = udpSend(ipAddr, udpMsg)
-                fileProgBar.progress(10)
+                    # Send file over tcp
+                    tcpSendFile(addr, fileByteArray[k], fileData[k].name, fileProgBar)  
+                    fileProgBar.progress(90)
 
-                # Send file over tcp
-                tcpSendFile(addr, fileByteArray[k], fileData[k].name, fileProgBar)  
-                fileProgBar.progress(90)
+                    # Give the server time to close the connection DO NOT DELETE PLEASE, it gave me problems
+                    time.sleep(1)
+                    fileProgBar.progress(100)
 
-                # Give the server time to close the connection DO NOT DELETE PLEASE, it gave me problems
-                time.sleep(1)
-                fileProgBar.progress(100)
-
-            # Notify that the files are uploaded
-            st.success('Files were uploaded')
-
+                # Notify that the files are uploaded
+                st.success('Files were uploaded')
+        except:
+            pass
 
     return filesChanged
 
@@ -617,6 +661,7 @@ def udpServer(addr):
     UDP_PORT = addr[1]     # Listen on this port
 
     sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)  # UDP
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((UDP_IP, UDP_PORT))
 
     data, addr = sock.recvfrom(4096)  # buffer size is 4096 bytes
@@ -734,6 +779,7 @@ def displayData():
     #selFile = st.selectbox('Select File(s) From Batman to View',fileNames)
     
     #with st.beta_expander("Sensitivity Data"):
+    st.subheader('Trigger')
 
     if (data == None):
         st.warning('Run a test to see data')
@@ -782,42 +828,65 @@ def displayData():
             
 
             
-    with st.beta_expander("Audio Data"):
-        # Create columns
-        col1, col2, col3, col4 = st.beta_columns([2, 2, 1, 1])
+    #with st.beta_expander("Audio"):
+    st.subheader('Audio')
+    # Create columns
+    col1, col2, col3, col4 = st.beta_columns([2, 2, 1, 1])
 
-        # Select the first files
-        selFile1 = col1.selectbox('Select Audio File From Batman',fileNames)
+    # Select the first files
+    selFile1 = col1.selectbox('Select Audio File From Batman',fileNames)
 
-        # Retrieve the list of recordings from the unit
-        global recordedFileNames
-        # To make sure we have all the files and nothing was lost over the udp, '10000000' is arbitrary. Just a really high number
-        numNames = '10000000'
-        while len(recordedFileNames) < int(numNames):
-            recordedFileNames, numNames = checkFileList('recordings')
-            # If for some reason we get no names, do it again
-            if recordedFileNames != []:
-                # If I get bytes instead of strings, get another list
-                while type(recordedFileNames[0]) == type(b'byte'):
-                    recordedFileNames, numNames = checkFileList('recordings')
+    # Retrieve the list of recordings from the unit
+    global recordedFileNames
+    # To make sure we have all the files and nothing was lost over the udp, '10000000' is arbitrary. Just a really high number
+    numNames = '10000000'
+    while len(recordedFileNames) < int(numNames):
+        recordedFileNames, numNames = checkFileList('recordings')
+        # If for some reason we get no names, do it again
+        if recordedFileNames != []:
+            # If I get bytes instead of strings, get another list
+            while type(recordedFileNames[0]) == type(b'byte'):
+                recordedFileNames, numNames = checkFileList('recordings')
 
-        # Select the second file
-        selFile2 = col2.selectbox('Select Recording File From Batman',recordedFileNames)
-        
+    # Select the second file
+    selFile2 = col2.selectbox('Select Recording File From Batman',recordedFileNames)
+    
+    with col2.beta_container():
+        # Listen to the file
+        #audio_file = open('Recordings/'+selFile2, 'rb')
+        #audio_bytes = audio_file.read()
+        #st.audio(audio_bytes, format='audio/ogg')
+
+        # Download a file
+        if st.button('Download File', key='download recording'):
+            try:
+                # Tell the controller that we want to download a file
+                unitAddr = [unitAddrs['11'], int(unitPorts['11'])]
+                data = b'11gfr' + selFile2.encode()
+                addr = udpSend(unitAddr, data)
+
+                with st.spinner('Downloading...'):
+                    # Recieve the audio file and save it in the downloads folder
+                    tcpRecieveFile(addr)
+            except:
+                st.warning('You need to run a test before you see recordings')
+
         # Remove file button
         # To remove a file
-        if col2.button('Remove File', key='remove recording'):
-
+        if st.button('Remove File', key='remove recording'):
             sshDeleteFile(selFile2, 'recordings')
 
-        # Select the plot type
-        selCol = col3.radio("What do you want?",
-                        ('Layered Plot','Seperate Plots'))
+    # Select the plot type
+    selCol = col3.radio("What do you want?",
+                    ('Layered Plot','Seperate Plots'))
 
-        # Make the plots
-        col4.title('')
-        if col4.button('Load File'):
+    # Make the plots
+    col4.title('')
+    if col4.button('Load File'):
+        try:
             makeAudioPlot(selFile1, selFile2, selCol)
+        except:
+            pass
 
 # makeAudioPlot(fileName)
 #   -Takes the downloaded file and displays it as a waveform
@@ -1053,10 +1122,13 @@ def setSensFreq():
 
     # Send the frequency to both radios to set them
     if st.button('Set Frequency'):
-        # Send the sending unit the change frequency command, and that unit sends the command to the recieving unit
-        msg = '11'.encode() + b'fs' + freqStr[:2].encode() + freqStr[3:].encode()
-        addrF = [unitAddrs['11'], int(unitPorts['11'])]
-        addrF = udpSend(addrF, msg)
+        try:
+            # Send the sending unit the change frequency command, and that unit sends the command to the recieving unit
+            msg = '11'.encode() + b'fs' + freqStr[:2].encode() + freqStr[3:].encode()
+            addrF = [unitAddrs['11'], int(unitPorts['11'])]
+            addrF = udpSend(addrF, msg)
+        except:
+            pass
 
     # User select sensitivity
     sens = st.number_input('Please select a sensitivity in dBm', 
@@ -1072,6 +1144,9 @@ def setSensFreq():
     # Send the sensitivity to set it
     
     if st.button('Set Sensitivity'):
-        msg = b'11' + b's' + sensStr.encode()
-        addrS = [unitAddrs['11'], int(unitPorts['11'])]
-        addrS = udpSend(addrS, msg)
+        try:
+            msg = b'11' + b's' + sensStr.encode()
+            addrS = [unitAddrs['11'], int(unitPorts['11'])]
+            addrS = udpSend(addrS, msg)
+        except:
+            pass

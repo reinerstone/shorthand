@@ -3,6 +3,7 @@ IMPORTS
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 
+from altair.vegalite.v4.schema.core import FieldDefWithConditionMarkPropFieldDefnumber
 import streamlit as st  # Streamlit
 import matplotlib.pyplot as plt 
 import socket           # Networking
@@ -41,11 +42,13 @@ recordedFileNames = []     # List of the recorded files
 firstRun        = True     # To run the udp setup only once
 sock            = ''       # To make a global socket
 refresh         = False    # Toggles to cause a refesh in refresh()
-testData        = None
+runTest1         = True
+runTest2         = True
+runTest3         = True
+#testData        = None
+
 
 # Inputs
-#inSensLines = 0
-
 inSenseHigh = 0
 inSenseStep = 0
 inSenseLow  = 0
@@ -57,6 +60,14 @@ inSFreqLow  = 0
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 INIT Code
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+# if testData is undeclared, declare it. If not, dont.
+try:
+    # If tesData has anything, it will pass. If its empty, it will throw an error
+    if (testData):
+        pass
+except:
+    testData = None
+
 def udpSetup():
     global sock
     global firstRun
@@ -151,11 +162,15 @@ def actionHandler(selFile):
         #    udpSend(addr, msg)
 
         # If the button was clicked, stop the playing
-        if col2.button('Run Att. Test'):
+        if col2.button('Run Sens. Test'):
             try:
-                global testData
-                #testData = None
-                testData = startTest(selFile)
+                global runTest1
+                global runTest2
+                global runTest3
+                if((runTest1 == True) and (runTest2 == True) and (runTest3 == True)):
+                    global testData
+                    #testData = None
+                    testData = startTest(selFile)
             except:
                 pass
 
@@ -768,7 +783,6 @@ def displayData():
     #path = 'C:/Users/'+userName+'/Downloads/'
     global testData
     global fileNames
-    data = testData
 
     st.title('See Data')
     #selFile = st.selectbox('Select File(s) From Batman to View',fileNames)
@@ -836,8 +850,6 @@ def displayData():
             path = 'C:/Users/'+userName+'/Downloads/'
             # Save the file as a .csv file
             saveFile('sensitivityData.csv', dfDict, path)
-            
-            
             
     #with st.beta_expander("Audio"):
     st.subheader('Audio')
@@ -1057,13 +1069,22 @@ def testConfigs():
                                 value = 55.750,      # Starting value
                                 step = 0.025,
                                 format= '%.3f')        # Step value
-        
-        # Round and convert to string because computer math sucks and we can't index a float
-        inSFreqHigh = str(round(inSFreqHigh, 3))
+        # Check if its a valid increment
+        test1 = (round(round(inSFreqHigh, 3) % 0.025, 3) != 0.0)
+        test2 = (round(round(inSFreqHigh, 3) % 0.025, 3) != 0.025)
+        global runTest1
+        if ((test1) and (test2)):
+            st.warning('Frequency increments of 0.025 only')
+            # Only run a test with a valid frequency
+            runTest1 = False
+        else:
+            # Round and convert to string because computer math sucks and we can't index a float
+            inSFreqHigh = str(round(inSFreqHigh, 3))
+            runTest1 = True
 
-        # Add a zero to make it a 5 digit number
-        while (len(inSFreqHigh) < 6):
-            inSFreqHigh = inSFreqHigh + '0'
+            # Add a zero to make it a 5 digit number
+            while (len(inSFreqHigh) < 6):
+                inSFreqHigh = inSFreqHigh + '0'
 
     with freqCol2:
         global inSFreqStep
@@ -1073,19 +1094,30 @@ def testConfigs():
                                 value = 5.000,      # Starting value
                                 step = 0.025,
                                 format= '%.3f')        # Step value
-        # To keep the number of zeros the same for all the frequency numbers, we add to the front
-        intStep = inSFreqStep
-
-        # Round and convert to string because computer math sucks and we can't index a float
-        inSFreqStep = str(round(inSFreqStep, 3))
         
-        # We add the front zeros here 
-        if (intStep < 10.0):
-            inSFreqStep = '0' + inSFreqStep
+        # Check if its a valid increment
+        test1 = (round(round(inSFreqStep, 3) % 0.025, 3) != 0.0)
+        test2 = (round(round(inSFreqStep, 3) % 0.025, 3) != 0.025)
+        global runTest2
+        if ((test1) and (test2)):
+            st.warning('Frequency increments of 0.025 only')
+            # Only run a test with a valid frequency
+            runTest2 = False
+        else:
+            runTest2 = True
+            # To keep the number of zeros the same for all the frequency numbers, we add to the front
+            intStep = inSFreqStep
 
-        # Add a zero to make it a 5 digit number
-        while (len(inSFreqStep) < 6):
-            inSFreqStep = inSFreqStep + '0'
+            # Round and convert to string because computer math sucks and we can't index a float
+            inSFreqStep = str(round(inSFreqStep, 3))
+            
+            # We add the front zeros here 
+            if (intStep < 10.0):
+                inSFreqStep = '0' + inSFreqStep
+
+            # Add a zero to make it a 5 digit number
+            while (len(inSFreqStep) < 6):
+                inSFreqStep = inSFreqStep + '0'
 
     with freqCol3:
         global inSFreqLow
@@ -1096,12 +1128,22 @@ def testConfigs():
                                 step = 0.025,
                                 format= '%.3f')        # Step value
         
-        # Round and convert to string because computer math sucks and we can't index a float
-        inSFreqLow = str(round(inSFreqLow, 3))
+        # Check if its a valid increment
+        test1 = (round(round(inSFreqLow, 3) % 0.025, 3) != 0.0)
+        test2 = (round(round(inSFreqLow, 3) % 0.025, 3) != 0.025)
+        global runTest3
+        if ((test1) and (test2)):
+            st.warning('Frequency increments of 0.025 only')
+            # Only run a test with a valid frequency
+            runTest3 = False
+        else:
+            runTest3 = True
+            # Round and convert to string because computer math sucks and we can't index a float
+            inSFreqLow = str(round(inSFreqLow, 3))
 
-        # Add a zero to make it a 5 digit number
-        while (len(inSFreqLow) < 6):
-           inSFreqLow = inSFreqLow  + '0'
+            # Add a zero to make it a 5 digit number
+            while (len(inSFreqLow) < 6):
+                inSFreqLow = inSFreqLow  + '0'
 
     #global inSensLines
     #inSensLines = st.number_input('Number of graph lines', 
@@ -1131,15 +1173,21 @@ def setSensFreq():
     # It is rounded because computer math is annoying 
     freqStr = str(round(freq, 3))
 
-    # Send the frequency to both radios to set them
-    if st.button('Set Frequency'):
-        try:
-            # Send the sending unit the change frequency command, and that unit sends the command to the recieving unit
-            msg = '11'.encode() + b'fs' + freqStr[:2].encode() + freqStr[3:].encode()
-            addrF = [unitAddrs['11'], int(unitPorts['11'])]
-            addrF = udpSend(addrF, msg)
-        except:
-            pass
+    # Check if its a valit increment
+    test1 = (round(round(freq, 3) % 0.025, 3) != 0.0)
+    test2 = (round(round(freq, 3) % 0.025, 3) != 0.025)
+    if ((test1) and (test2)):
+        st.warning('Frequency increments of 0.025 only')
+    else:
+        # Send the frequency to both radios to set them
+        if st.button('Set Frequency'):
+            try:
+                # Send the sending unit the change frequency command, and that unit sends the command to the recieving unit
+                msg = '11'.encode() + b'fs' + freqStr[:2].encode() + freqStr[3:].encode()
+                addrF = [unitAddrs['11'], int(unitPorts['11'])]
+                addrF = udpSend(addrF, msg)
+            except:
+                pass
 
     # User select sensitivity
     sens = st.number_input('Please select a sensitivity in dBm', 

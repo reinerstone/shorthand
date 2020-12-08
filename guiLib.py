@@ -41,7 +41,7 @@ recordedFileNames = []     # List of the recorded files
 firstRun        = True     # To run the udp setup only once
 sock            = ''       # To make a global socket
 refresh         = False    # Toggles to cause a refesh in refresh()
-testData        = []
+testData        = None
 
 # Inputs
 #inSensLines = 0
@@ -120,8 +120,7 @@ SIDEBAR LIB
 # actionHandler(selFile)
 #   - Displays the 'start playing' and the 'start testing' buttons and activates the respective actions
 def actionHandler(selFile):
-    global testData
-    testData = None
+    
     
     #with st.sidebar.beta_expander("Test File"):
     with st.sidebar.beta_container():
@@ -154,6 +153,8 @@ def actionHandler(selFile):
         # If the button was clicked, stop the playing
         if col2.button('Run Att. Test'):
             try:
+                global testData
+                #testData = None
                 testData = startTest(selFile)
             except:
                 pass
@@ -206,13 +207,7 @@ def startTest(selFile):
         # Start the tcp to recieve the array
         sensData = tcpReceiveArray(ipaddr)
 
-        # Get the path to save it 
-        # Get user name for the path to save the file
-        #userName = getpass.getuser()
-        #path = 'C:/Users/'+userName+'/Downloads/'
-
-        # Save the file as a .csv file
-        #saveFile('sensitivityData.csv', sensData, path)
+        
 
         return sensData
 
@@ -781,7 +776,7 @@ def displayData():
     #with st.beta_expander("Sensitivity Data"):
     st.subheader('Trigger')
 
-    if (data == None):
+    if (testData == None):
         st.warning('Run a test to see data')
         pass
     else:
@@ -791,42 +786,58 @@ def displayData():
         datalist = []
         saveFreqs = []
 
-        for i in range(len(data)):
+        for i in range(len(testData)):
             sense = []
 
             # Get the frequencies used
-            for freq in range(1, len(data[0]), 2):
-                sense.append(data[0][freq])
+            for freq in range(1, len(testData[0]), 2):
+                sense.append(testData[0][freq])
 
             sensitivities.append(sense)
 
             dataPoints = []
 
             # Get the data
-            for dat in range(2, len(data[i]), 2):
-                dataPoints.append(data[i][dat])
+            for dat in range(2, len(testData[i]), 2):
+                dataPoints.append(testData[i][dat])
 
-            dataDict[data[i][0]] = dataPoints
+            dataDict[testData[i][0]] = dataPoints
 
             datalist.append(dataPoints)
 
             # A seperate list of frequencies for the dataframe columns
-            saveFreqs.append(data[i][0])
+            saveFreqs.append(testData[i][0])
 
         dfDict = pd.DataFrame.from_dict(
                 dataDict,
                 orient='index',
                 columns = sense)
 
-        col1, col2 = st.beta_columns([3,1])
+        #col1, col2 = st.beta_columns([3,1])
         # Create a line chart of the data in the gui
-        col1.line_chart(dfDict, use_container_width=True)
+        #col1.line_chart(dfDict, use_container_width=True)
 
         # Display the contents as a table in the gui
-        col2.write(dfDict)
-            
-            
+        #col2.write(dfDict)
 
+        # Create a line chart of the data in the gui
+        st.line_chart(dfDict, use_container_width=True)
+
+        # Display the contents as a table in the gui
+        #st.write(dfDict)
+        st.dataframe(dfDict.style.highlight_max(axis=0))
+
+        
+        # Download .csv file
+        if (st.button('Download .csv file')):
+            # Get the path to save it 
+            # Get user name for the path to save the file
+            userName = getpass.getuser()
+            path = 'C:/Users/'+userName+'/Downloads/'
+            # Save the file as a .csv file
+            saveFile('sensitivityData.csv', dfDict, path)
+            
+            
             
     #with st.beta_expander("Audio"):
     st.subheader('Audio')
@@ -943,7 +954,7 @@ def getWavData(fileName):
 
             # Recieve the times
             times = b''
-            with st.spinner('Loading from the unit...(this can take a while if the file is large)'):
+            with st.spinner('Loading from the unit...(this can take a while if the recording is long)'):
                 # First we are getting the times array (x axis)
                 while True:
                     # Recieve the data

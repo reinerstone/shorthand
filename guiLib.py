@@ -361,7 +361,7 @@ def tcpRecieveFile(addr):
         s.listen()
         conn, addr = s.accept()
         with conn:
-            print('Connected by', addr)
+            #print'Connected by', addr)
 
             fileName = 'New Name'
             wholedataLength = 'Will find out'
@@ -394,11 +394,11 @@ def tcpRecieveFile(addr):
                     # Check the data length
                     saveDataLength = str(len(saveData))
 
-                    print(saveDataLength)
+                    #printsaveDataLength)
                     # If we recieved all the data, reply to the client 
                     if (saveDataLength == wholedataLength):
                         conn.sendall(b'Recieved all data')
-                        print('done.')
+                        #print'done.')
             
             # Get user name for the path to save the file
             userName = getpass.getuser()
@@ -612,7 +612,7 @@ def checkFileList(listType):
     while True:
         #Recieve the file names
         msg, ipaddr = udpServer(addr)
-        print(msg)
+        #printmsg)
 
         # The unit always first responds with the following message. Ignore it, its for manual controlling
         if msg != b'You connected to unit 11':
@@ -650,9 +650,9 @@ def udpSend(addr, data):
     UDP_PORT = addr[1]
     MESSAGE = data     # MESSAGE needs to be in byte format
 
-    print("UDP target IP: %s" % UDP_IP)
-    print("UDP target port: %s" % UDP_PORT)
-    print("message: %s" % MESSAGE)
+    #print"UDP target IP: %s" % UDP_IP)
+    #print"UDP target port: %s" % UDP_PORT)
+    #print"message: %s" % MESSAGE)
 
     sock = socket.socket(socket.AF_INET,  # Internet
                          socket.SOCK_DGRAM)  # UDP
@@ -688,7 +688,7 @@ def tcpSendFile(ipAddr, fileData, fileName, fileProgBar):
 
     # Calculate file length from the byte array
     fileDataLength = str(len(fileData))
-    print("Length of data: " + fileDataLength)
+    #print"Length of data: " + fileDataLength)
 
     HOST = '10.0.0.134'     # Ip address of the target server (where to send)
     PORT = ipAddr[1]     # Port of the target server(where to send)
@@ -732,7 +732,7 @@ def tcpSendFile(ipAddr, fileData, fileName, fileProgBar):
         # If the whole file was recieved,  close the connection
         dataRecieved = s.recv(1024)
         if (dataRecieved == b'Recieved all data'):
-            print('Finished sending...')
+            #print'Finished sending...')
             # Manually closes the connection   
             s.sendall(b'end')
 
@@ -741,7 +741,7 @@ def tcpSendFile(ipAddr, fileData, fileName, fileProgBar):
 
             # Close the connection
             s.close()
-            print('done.')
+            #print'done.')
 
 # refresh()
 #   -A change in source code causes a reload with the streamlit api
@@ -914,24 +914,29 @@ def displayData():
 # makeAudioPlot(fileName)
 #   -Takes the downloaded file and displays it as a waveform
 def makeAudioPlot(selFile1, selFile2, selCol):
-    st.subheader('Original Audio')
+    
     
     # Get data from the raspberry pi
     signal1, times1 = getWavData(selFile1)
     signal2, times2 = getWavData(selFile2)
 
     # Make the plots
-    
-
     if (selCol == 'Layered Plot'):
         fig, ax = plt.subplots()
         ax.plot(times1,signal1)
         ax.plot(times2,signal2)
     else:
         fig, ax = plt.subplots(2)
+        plt.subplots_adjust(hspace = 0.5)
+
+        #st.subheader('Original Audio')
         ax[0].plot(times1,signal1)
+        ax[0].set_title('Original Audio')
+        #st.subheader('Recorded Audio')
         ax[1].plot(times2,signal2)
+        ax[1].set_title('Recorded Audio')
         #plt.title('Signal Wave...')
+        
 
     # labels
 
@@ -943,6 +948,7 @@ def makeAudioPlot(selFile1, selFile2, selCol):
 
 # getWavData(fileName)
 #   - Gets the raw wave file data from the unit over a tcp channel
+@st.cache #Cache so we dont load the files every time theres a simple change
 def getWavData(fileName):
     # Message
     unitAddr = [unitAddrs['11'], int(unitPorts['11'])]
@@ -962,7 +968,7 @@ def getWavData(fileName):
         s.listen()
         conn, addr = s.accept()
         with conn:
-            print('Connected by', addr)
+            #print'Connected by', addr)
 
             # Recieve the times
             times = b''
@@ -975,7 +981,7 @@ def getWavData(fileName):
 
                     # Check for the end
                     if (data[-4:] == b'done'):
-                        print('Done.')
+                        #print'Done.')
                         # Save it and append
                         times = times + data[:-4]
                         conn.send(b'done')
@@ -994,7 +1000,7 @@ def getWavData(fileName):
                     
                     # Check for the end
                     if (data[-4:] == b'done'):
-                        print('Done.')
+                        #print'Done.')
                         # Save it and append
                         saveData = saveData + data[:-4]
                         break

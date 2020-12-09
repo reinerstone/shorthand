@@ -917,28 +917,69 @@ def makeAudioPlot(selFile1, selFile2, selCol):
     
     
     # Get data from the raspberry pi
-    signal1, times1 = getWavData(selFile1)
-    signal2, times2 = getWavData(selFile2)
+    signalOrig, times1 = getWavData(selFile1)
+    signalRec, times2 = getWavData(selFile2)
 
-    # Make the plots
-    if (selCol == 'Layered Plot'):
-        fig, ax = plt.subplots()
-        ax.plot(times1,signal1)
-        ax.plot(times2,signal2)
-    else:
-        fig, ax = plt.subplots(2)
-        plt.subplots_adjust(hspace = 0.5)
+    # Fill the uneven beginning with a zero array
+    lengthDif = len(signalOrig) - len(signalRec)
+    lengArray = [0]*abs(lengthDif)
+    
+    # Now we make sure both audio files are the same length for the graphs
+    if (lengthDif > 0):
+        #Insert the zero array into the audio at the beginning
+        signalRec = np.insert(signalRec, 0, lengArray, axis=0)
+        
+        # Make the plots
+        if (selCol == 'Layered Plot'):
+            fig, ax = plt.subplots()
+            ax.plot(times1,signalOrig)
+            ax.plot(times1,signalRec)
 
-        #st.subheader('Original Audio')
-        ax[0].plot(times1,signal1)
-        ax[0].set_title('Original Audio')
-        #st.subheader('Recorded Audio')
-        ax[1].plot(times2,signal2)
-        ax[1].set_title('Recorded Audio')
-        #plt.title('Signal Wave...')
+            # labels
+            mylabels = ['recorded', 'origional']
+            plt.legend(labels = mylabels)
+            
+        else:
+            fig, ax = plt.subplots(2)
+            plt.subplots_adjust(hspace = 0.5)
+
+            #st.subheader('Original Audio')
+            ax[0].plot(times1,signalOrig)
+            ax[0].set_title('Original Audio')
+            #st.subheader('Recorded Audio')
+            ax[1].plot(times1,signalRec)
+            ax[1].set_title('Recorded Audio')
+            #plt.title('Signal Wave...')
+
+    elif(lengthDif < 0):
+        #Insert the zero array into the audio at the beginning
+        signalOrig = np.insert(signalOrig, 0, lengArray, axis=0)
+
+        # Make the plots
+        if (selCol == 'Layered Plot'):
+            fig, ax = plt.subplots()
+            ax.plot(times2,signalOrig)
+            ax.plot(times2,signalRec)
+
+            # labels
+            mylabels = ['recorded', 'origional']
+            plt.legend(labels = mylabels)
+
+            # labels
+            mylabels = ['recorded', 'origional']
+            plt.legend(labels = mylabels)
+        else:
+            fig, ax = plt.subplots(2)
+            plt.subplots_adjust(hspace = 0.5)
+
+            ax[0].plot(times2,signalOrig)
+            ax[0].set_title('Original Audio')
+            ax[1].plot(times2,signalRec)
+            ax[1].set_title('Recorded Audio')
+
         
 
-    # labels
+    
 
     plt.ylabel("Amplitude")
     plt.xlabel("Time(s)")

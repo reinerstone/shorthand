@@ -3,7 +3,7 @@ IMPORTS
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 
-from altair.vegalite.v4.schema.core import FieldDefWithConditionMarkPropFieldDefnumber
+#from altair.vegalite.v4.schema.core import FieldDefWithConditionMarkPropFieldDefnumber
 import streamlit as st  # Streamlit
 import matplotlib.pyplot as plt 
 import socket           # Networking

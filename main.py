@@ -17,7 +17,7 @@ import guiLib
 # This is for integrated debugging: https://awesome-streamlit.readthedocs.io/en/latest/vscode.html
 import ptvsd
 ptvsd.enable_attach(address=('localhost', 5678))
-ptvsd.wait_for_attach() # Only include this line if you always wan't to attach the debugger
+#ptvsd.wait_for_attach() # Only include this line if you always wan't to attach the debugger
 
 #import threading
 
@@ -27,7 +27,9 @@ ptvsd.wait_for_attach() # Only include this line if you always wan't to attach t
 #threadMain.start()
 
 #guiLib.checkIn()
+try:
+    guiLib.sidebarGui()
 
-guiLib.sidebarGui()
-
-guiLib.mainGui()
+    guiLib.mainGui()
+except:
+    pass
